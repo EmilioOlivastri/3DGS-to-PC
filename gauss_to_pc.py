@@ -55,7 +55,6 @@ class GaussPointCloudSettings(NamedTuple):
     exact_num_points: int
     visibility_threshold: float
     surface_distance_std: float
-    generate_mesh: bool
     quiet: bool
     device: str
 
@@ -429,7 +428,7 @@ def convert_3dgs_to_pc(input_path, transform_path, mask_path, pointcloud_setting
         gaussian_renderer = get_renderer(pointcloud_settings.renderer_type, gaussians.xyz, torch.unsqueeze(torch.clone(gaussians.opacities), 1), 
                                          gaussians.colours, gaussians.covariances, visible_gaussian_threshold=pointcloud_settings.visibility_threshold, 
                                          surface_distance_std=pointcloud_settings.surface_distance_std, 
-                                         calculate_surface_distance=True if (pointcloud_settings.surface_distance_std is not None or pointcloud_settings.generate_mesh) else False)
+                                         calculate_surface_distance=True if (pointcloud_settings.surface_distance_std is not None) else False)
 
         if transform_path is not None:
 
@@ -502,12 +501,6 @@ def convert_3dgs_to_pc(input_path, transform_path, mask_path, pointcloud_setting
         if gaussians.xyz.shape[0] < 1:
             raise Exception("Number of Gaussians after culling is 0, meaning a point cloud cannot be generated")
 
-        # Get the predicted surface Gaussians
-        if pointcloud_settings.generate_mesh:
-            surface_gaussian_idxs = gaussian_renderer.get_predicted_surface_gaussians(predicted_surface_std=1.0)
-
-            surface_gaussian_idxs = surface_gaussian_idxs[culled_indices] 
-
         # Get total contributions of each Gaussian over all images (used for smart point generation)
         if pointcloud_settings.prioritise_visible_gaussians:
             total_gaussian_contributions = gaussian_renderer.get_total_gaussian_contributions()[culled_indices]
@@ -557,48 +550,11 @@ def convert_3dgs_to_pc(input_path, transform_path, mask_path, pointcloud_setting
     if not pointcloud_settings.quiet:
         print()
 
-    surface_point_cloud = None
-
-    # Generate surface point cloud if meshing the scene
-    if pointcloud_settings.generate_mesh and pointcloud_settings.render_colours:
-        if not pointcloud_settings.quiet:
-            print("Starting Point Cloud Generation for Surface Gaussians")
-            print()
-
-        surface_gaussian_idxs = surface_gaussian_idxs[invalid_gaussian_indices]
-
-        # Ensure that only surface gaussians are now included
-        gaussians.add_gaussians_to_cull(surface_gaussian_idxs)
-
-        gaussians.filter_gaussians()
-
-        avg_points_per_gauss_for_mesh = 25
-
-        # Set the number of mesh points as the large of the number of surface Gaussians multiplied by the average points per Gaussian
-        # Or half the number of points set by the user 
-        total_mesh_points = min(pointcloud_settings.num_points//2, int(gaussians.xyz.shape[0]*avg_points_per_gauss_for_mesh))
-
-        # Generate points for the point cloud of the mesh
-        points, colours, normals = generate_pointcloud(gaussians, total_mesh_points, exact_num_points=pointcloud_settings.exact_num_points, 
-                                                                                     num_sample_attempts=num_sample_attempts,
-                                                                                     contributions=total_gaussian_contributions[surface_gaussian_idxs],
-                                                                                     device=pointcloud_settings.device,
-                                                                                     quiet=pointcloud_settings.quiet)
-
-        surface_point_cloud = PointCloudData(
-            points = points,
-            colours = colours,
-            normals = normals
-        )
-
-        if not pointcloud_settings.quiet:
-            print()
-
     # Clear memory 
     torch.cuda.empty_cache()  
     gc.collect()  
 
-    return total_point_cloud, surface_point_cloud
+    return total_point_cloud
 
 def config_parser():
 
@@ -620,11 +576,6 @@ def config_parser():
     parser.add_argument("--surface_distance_std", type=float, default=None, help="Cull Gaussians that are a minimum of X standard deviations away from the scene surfaces (smaller value = less noise)")
     parser.add_argument("--clean_pointcloud", action="store_true", help="Set to remove outliers on the point cloud after generation (requires Open3D)")
     
-    parser.add_argument("--generate_mesh", action="store_true", help="Set to also generate a mesh based on the created point cloud (requires Open3D)")
-    parser.add_argument("--poisson_depth", default=10, type=int, help="The depth used in the poisson surface reconstruction algorithm that is used for meshing (larger value = more quality) ")
-    parser.add_argument("--laplacian_iterations", default=10, type=int, help="The number of iterations to perform laplacian mesh smoothing (larger value = smoother mesh)")
-    parser.add_argument("--mesh_output_path",  type=str, default="3dgs_mesh.ply", help="Path to mesh output file (must be ply file)")
-
     parser.add_argument("--camera_skip_rate", type=int, default=0, help="Number of cameras to skip for each rendered camera (reduces compute time- only use if cameras in linear trajectory)")
     
     parser.add_argument("--no_render_colours", action="store_true", help="Skip rendering colours- faster but colours will be strange")
@@ -683,15 +634,6 @@ def config_parser():
     if args.camera_skip_rate < 0:
         raise AttributeError(f"The camera skip rate must be larger than 0")
 
-    if args.generate_mesh and args.no_calculate_normals:
-        raise AttributeError(f"Normals are required for accurate meshing")
-
-    if args.generate_mesh and args.no_render_colours:
-        raise AttributeError(f"Colours are required for meshing")
-
-    if args.generate_mesh and args.transform_path is None:
-        raise AttributeError(f"Transforms are required for meshing")
-
     if not args.no_render_colours and args.transform_path is None:
         raise AttributeError(f"Transforms are required for rendering accurate point colours, set --no_render_colours to True to render with no colour")
 
@@ -728,7 +670,6 @@ def main():
         colour_resolution=COLOR_QUALITY_OPTIONS[args.colour_quality.lower()],
         max_sh_degree=args.max_sh_degree, 
         exact_num_points = args.exact_num_points,
-        generate_mesh = args.generate_mesh,
         visibility_threshold=args.visibility_threshold,
         surface_distance_std=args.surface_distance_std,
         quiet=args.quiet,
@@ -737,7 +678,7 @@ def main():
     )
 
     # Generate point cloud from 3DGS scene
-    total_point_cloud, surface_point_cloud = convert_3dgs_to_pc(args.input_path, args.transform_path, args.mask_path, pointcloud_settings)
+    total_point_cloud = convert_3dgs_to_pc(args.input_path, args.transform_path, args.mask_path, pointcloud_settings)
     
     # Clean point cloud if set
     if args.clean_pointcloud:
@@ -765,22 +706,9 @@ def main():
     save_xyz_to_ply(total_point_cloud.points, args.output_path, rgb_colors=total_point_cloud.colours, 
                                                                 normals_points=total_point_cloud.normals, chunk_size=10**6, quiet=args.quiet)
 
-    """save_xyz_to_ply(surface_point_cloud.points, "surface_points.ply", rgb_colors=surface_point_cloud.colours,
-                                                                normals_points=surface_point_cloud.normals, chunk_size=10**6)"""
-
     if not args.quiet:
         print()
 
-    # Generate mesh from surface point cloud
-    if pointcloud_settings.generate_mesh:
-        if not args.quiet:
-            print("Generating Mesh")
-
-        from mesh_handler import generate_mesh
-
-        # Generate and save mesh using Open3D
-        generate_mesh(surface_point_cloud.points, surface_point_cloud.colours, surface_point_cloud.normals, args.mesh_output_path, 
-                      depth=args.poisson_depth, laplacian_iters=args.laplacian_iterations)
 
 if __name__ == "__main__":
     main()

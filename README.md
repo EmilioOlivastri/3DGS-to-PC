@@ -1,56 +1,43 @@
 # 3D Gaussian Splatting to Point Cloud (or Mesh)
 
-Gaussian Splatting can generate extremely high quality 3D representations of a scene. However, to properly view this reconstruction, specialised gaussian renders are required. Furthermore, a lot of 3D handling software are not compatible with 3D gaussians... but most are compatible with point clouds.
+The original repo and papers can be found:
 
-This repo offers scripts for converting a 3D Gaussian Splatting scene into a dense point cloud. The generated point clouds are high-quality and effectively imitate the original 3DGS scenes. Extra functionality is offered to customise the creation of the point cloud, as well as producing a mesh of the scene.
-
-1) **Technical Paper:** *https://openaccess.thecvf.com/content/ICCV2025W/3D-VAST/html/Stuart_3DGS-to-PC_3D_Gaussian_Splatting_to_Dense_Point_Clouds_ICCVW_2025_paper.html*
+1) **Repository:**  *https://github.com/Lewis-Stuart-11/3DGS-to-PC*
+2) **Technical Paper:** *https://openaccess.thecvf.com/content/ICCV2025W/3D-VAST/html/Stuart_3DGS-to-PC_3D_Gaussian_Splatting_to_Dense_Point_Clouds_ICCVW_2025_paper.html*
 2) **Research Article:** *https://radiancefields.com/3dgs-to-dense-ply*
 3) **Research Article #2:** *https://radiancefields.com/3dgs-to-dense-point-cloud-v2*
-3) **Youtube Video (1):** *https://www.youtube.com/watch?v=cOXfKRFqqxg*
-4) **Youtube Video (2):** *https://www.youtube.com/watch?v=iB1WDiYxkws*
-
-<p align="center">
-  <img src="https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExZHA5MXptbjBjOGY1MzVwczFyejIydW1zdmdmejQ0aThkOG8wMXE2YiZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/7UknswhXAHe88S93OY/giphy-downsized-large.gif" width="45%" />
-  <img src="https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExeXdsM3k2Z3JlZ296eDZpOWlwNHc0cjZpZHA1djdoeDU3c3h0a2ZveSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/Z9Cd1ENioEBGHxXcbs/giphy-downsized-large.gif" width="45%" /> 
-</p>
-
-Credit [3D Gaussian Splatting](https://github.com/graphdeco-inria/gaussian-splatting) and [Torch Splatting](https://github.com/hbb1/torch-splatting/tree/main), which were both used as part of this codebase.
 
 ## How to install
 
-Firstly, clone this repo:
+Cclone the repo:
 ```bash
-git clone https://github.com/Lewis-Stuart-11/3DGS-to-PC
-```
-Ensure that the original 3D Gaussian Splatting repo has been installed correctly, as this contains all required modules/packages.
-
-Next you will need to install the CUDA gaussian renderer using the following command:
-```bash
-pip install ./gaussian-pointcloud-rasterization
-```
-Ensure that you are inside of this project directory when you run this command. If you cannot install this CUDA extension, then don't worry, we still offer a pure python renderer which does not require any package installation.
-
-To perform meshing, you must install Open3D, which can be installed using the following command:
-```bash
-pip install open3d 
+git clone https://github.com/EmilioOlivastri/3DGS-to-PC 3dgs2pc
+cd 3dgs2pc
+pixi shell
+pixi run install-rasterizer
 ```
 
 ## How to run
-
-To run the basic point cloud generation, execute the following:
+To run the point cloud generation, execute the following:
 ```bash
-python gauss_to_pc.py --input_path "path//to//gaussian_splat"
+python gauss_to_pc.py --input_path path/to/gaussian_splat --output_path path/to/plc --clean_pointcloud --no_render_colours
+```
+Or for same effect, but with PIXI
+```bash
+pixi run convert-splats --input_path path/to/gaussian_splat --output_path path/to/plc
 ```
 The gaussian splat file can be either a .ply or .splat format.
 
+The pixi task can be personilized and tuned by overriding the following parameters.
+
+<!-- 
 However, if just the input file is provided, the colours of the point cloud will not look like the original 3D gaussian splats. To generate with authentic colours, include the path to the transform file/folder:
 
 ```bash
 python gauss_to_pc.py --input_path "path//to//gaussian_splat" --transform_path "path//to//tranasforms"
 ```
-
 The transform path can either be to a transforms.json file or COLMAP output files.
+-->
 
 ## Functionality 
 
@@ -92,14 +79,6 @@ Another approach is to set the ```surface_distance_std``` to a value, which will
 
 Finally, the ```clean_pointcloud``` will reduce noisy points using a statistical outlier removal algorithm (although this requires Open3D).
 
-### Meshing
-
-Our meshing approach is quite naive, which can lead to noise results. Some tips to improve the reconstruction:
-1) Set the ```poisson_depth``` argument to a higher value (we found that 12 produced the best results, but any higher produced an infeasible mesh)
-2) Set a bounding box to only mesh specific parts of the scene that are you need in the mesh
-3) If the final mesh is too sharp, we recommend using some of the features in CloudCompare (e.g. smoothing) to get the desired output.
-
-For generating a more accurate mesh, we recommend checking out [SuGaR](https://anttwo.github.io/sugar/).
 
 ### Speed
 There are several ways that rendering speed can be increased without substantially impacting the final quality of the point cloud:
@@ -109,7 +88,9 @@ There are several ways that rendering speed can be increased without substantial
 If you are using the Python renderer, consider using the CUDA renderer instead, as it is much more efficient!
 
 # Citation
+All credits and thanks go to the original repo and publications:
 
+**Repository:**  *https://github.com/Lewis-Stuart-11/3DGS-to-PC*
 ```
 @InProceedings{A_G_Stuart_2025_ICCV,
     author    = {A G Stuart, Lewis and Morton, Andrew and Stavness, Ian and Pound, Michael P},

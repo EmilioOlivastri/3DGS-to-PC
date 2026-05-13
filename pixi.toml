@@ -17,6 +17,10 @@ echo-env-vars = "echo CUDA_HOME=$CUDA_HOME"
 cmd = "pip install -e ./gaussian-pointcloud-rasterization --no-build-isolation --config-settings editable_mode=compat"
 env = { CUDA_HOME = "$PIXI_PROJECT_ROOT/.pixi/envs/default" }
 
+[tasks.convert-splats]
+cmd = "python gauss_to_pc.py --clean_pointcloud --no_render_colours"
+
+
 [system-requirements]
 cuda = "12.6"
 
