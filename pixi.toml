@@ -72,3 +72,6 @@ compilers = ">=1.10.0,<2"
 cuda = ">=12.6.3,<13"
 cuda-toolkit = ">=12.6.3,<13"
 pytorch-gpu = ">=2.7.1,<3"
+rerun-sdk = ">=0.21,<1"
+
+
